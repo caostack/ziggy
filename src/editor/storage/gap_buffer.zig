@@ -80,6 +80,13 @@ pub const GapBuffer = struct {
             }
         }
 
+        // Position cursor at end of content (same as gap position)
+        self.cursor_row = if (self.line_count > 0) self.line_count - 1 else 0;
+        if (self.line_count > 0) {
+            const last_line_start = self.line_starts[self.cursor_row];
+            self.cursor_col = self.gap_start - last_line_start;
+        }
+
         return self;
     }
 
@@ -139,6 +146,9 @@ pub const GapBuffer = struct {
             return DocumentError.InvalidUtf8;
         }
 
+        // Ensure gap is at cursor position before inserting
+        self.moveGapToCursor();
+
         const needed = bytes.len;
         const available = self.gap_end - self.gap_start;
 
@@ -154,12 +164,23 @@ pub const GapBuffer = struct {
 
         // Update cursor position and line tracking
         if (bytes.len == 1 and bytes[0] == '\n') {
-            // Newline inserted
+            // Newline inserted - need to update line_starts
             if (self.line_count >= self.line_capacity) {
                 try self.growLineCapacity();
             }
-            self.line_starts[self.line_count] = self.gap_start;
+
+            // The new line starts right after the newline (at current gap_start)
+            const new_line_start = self.gap_start;
+            const insert_at_row = self.cursor_row + 1;
+
+            // Shift line_starts to make room for new line
+            var i = self.line_count;
+            while (i > insert_at_row) : (i -= 1) {
+                self.line_starts[i] = self.line_starts[i - 1];
+            }
+            self.line_starts[insert_at_row] = new_line_start;
             self.line_count += 1;
+
             self.cursor_row += 1;
             self.cursor_col = 0;
         } else {
@@ -292,6 +313,47 @@ pub const GapBuffer = struct {
         self.cursor_row = @min(row, self.line_count -| 1);
         const line_len = self.getLineLength(self.cursor_row);
         self.cursor_col = @min(col, line_len);
+    }
+
+    /// Calculate byte offset of cursor position in document
+    fn cursorToByteOffset(self: *const Self) usize {
+        if (self.cursor_row >= self.line_count) return self.gap_start;
+
+        const line_start = self.line_starts[self.cursor_row];
+        // Adjust for gap if line_start is after gap
+        const adjusted_line_start = if (line_start < self.gap_start)
+            line_start
+        else
+            line_start + (self.gap_end - self.gap_start);
+
+        return adjusted_line_start + self.cursor_col;
+    }
+
+    /// Move gap to current cursor position
+    fn moveGapToCursor(self: *Self) void {
+        const target_offset = self.cursorToByteOffset();
+        const gap_size = self.gap_end - self.gap_start;
+
+        if (target_offset < self.gap_start) {
+            // Move gap left: copy data from target_offset to gap_start to after gap
+            const move_size = self.gap_start - target_offset;
+            const src = self.data[target_offset..self.gap_start];
+            const dst = self.data[self.gap_end - move_size .. self.gap_end];
+            @memcpy(dst, src);
+            self.gap_start = target_offset;
+            self.gap_end = target_offset + gap_size;
+        } else if (target_offset > self.gap_start) {
+            // Move gap right: copy data from gap_end to target to before gap
+            const adjusted_target = target_offset - gap_size; // target in pre-gap coordinates
+            if (adjusted_target > self.gap_start) {
+                const move_size = adjusted_target - self.gap_start;
+                const src = self.data[self.gap_end .. self.gap_end + move_size];
+                const dst = self.data[self.gap_start .. self.gap_start + move_size];
+                @memcpy(dst, src);
+                self.gap_start = adjusted_target;
+                self.gap_end = adjusted_target + gap_size;
+            }
+        }
     }
 
     /// Grow buffer capacity
