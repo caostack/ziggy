@@ -42,27 +42,23 @@ zig build run
 zig build run -- your-file.txt
 ```
 
-## Quality Gate (Enforced)
+## Quality & Philosophy
 
-This project enforces Zig's design philosophy through quality gates:
+We follow Zig's design principles, see [TEAM_CONVENTIONS.md](TEAM_CONVENTIONS.md) for our team agreements.
 
-### Local (Fast Feedback)
+### Quality Gate
 ```bash
 ./quality-gate.sh
 ```
 
-### CI/CD (Enforced)
-- GitHub Actions automatically checks every PR
-- Failing quality gates **block merging** to `main`
-- See `.github/workflows/quality-gate.yml`
+Note: Automated checks can only catch surface-level issues. Real quality comes from:
+- ✅ Human code review in PRs
+- ✅ Team discussions and consensus
+- ✅ Learning from Zig standard library
 
-### Setup Branch Protection
-```bash
-# Follow instructions to enable enforced checks
-./setup-branch-protection.sh
-```
+See [ZIG_PHILOSOPHY.md](ZIG_PHILOSOPHY.md) for philosophy details.
 
-See [QUALITY_GATE.md](QUALITY_GATE.md) and [ZIG_PHILOSOPHY.md](ZIG_PHILOSOPHY.md).
+## Quality Gate
 
 ```bash
 ./quality-gate.sh
