@@ -461,10 +461,11 @@ pub const FullEditor = struct {
         }
         try self.terminal.writeAll("\x1b[m"); // Reset colors
 
-        // Position cursor
-        const cursor_row = self.state.document.getCursorRow();
-        const cursor_col = self.state.document.getCursorCol();
-        try self.terminal.moveCursor(cursor_row + 1, cursor_col + 1);
+        // Position cursor (use viewport's screen coordinates, not document coordinates)
+        try self.terminal.moveCursor(
+            self.state.viewport.cursor_screen_row,
+            self.state.viewport.cursor_screen_col,
+        );
         try self.terminal.showCursor();
     }
 

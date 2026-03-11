@@ -259,7 +259,7 @@ pub const MockFileSystem = struct {
         const owned_path = try self.allocator.dupe(u8, path);
         const owned_content = try self.allocator.dupe(u8, content);
 
-        if (self.files.fetchPut(owned_path, owned_content)) |old| {
+        if (try self.files.fetchPut(owned_path, owned_content)) |old| {
             self.allocator.free(@constCast(old.key));
             self.allocator.free(@constCast(old.value));
         }

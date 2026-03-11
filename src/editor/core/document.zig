@@ -239,8 +239,7 @@ const MockDoc = struct {
     }
 
     fn mockGetLineLength(ptr: *anyopaque, line: usize) usize {
-        const self: *MockDoc = @ptrCast(@alignCast(ptr));
-        const content = self.mockGetLine(ptr, line) orelse return 0;
+        const content = mockGetLine(ptr, line) orelse return 0;
         return content.len;
     }
 

@@ -143,8 +143,10 @@ pub const NativeTerminal = struct {
             .output_mode = output_mode,
         } };
 
-        // Set raw input mode
-        const raw_input_mode: u32 = input_mode & ~(@as(u32, 0x0001 | 0x0002 | 0x0004));
+        // Set raw input mode: disable ENABLE_PROCESSED_INPUT(0x0001), ENABLE_LINE_INPUT(0x0002), ENABLE_ECHO_INPUT(0x0004)
+        // Enable virtual terminal input (0x0200) to receive arrow keys as ANSI escape sequences
+        const ENABLE_VIRTUAL_TERMINAL_INPUT: u32 = 0x0200;
+        const raw_input_mode: u32 = (input_mode & ~(@as(u32, 0x0001 | 0x0002 | 0x0004))) | ENABLE_VIRTUAL_TERMINAL_INPUT;
 
         // Enable virtual terminal processing for output
         const ENABLE_VIRTUAL_TERMINAL_PROCESSING: u32 = 0x0004;
