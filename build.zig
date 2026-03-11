@@ -142,6 +142,24 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
+    // 质量门禁工具
+    const quality_exe = b.addExecutable(.{
+        .name = "quality-gate",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/quality/main.zig"),
+            .target = target,
+            .optimize = .Debug,
+        }),
+    });
+
+    const quality_cmd = b.addRunArtifact(quality_exe);
+    if (b.args) |args| {
+        quality_cmd.addArgs(args);
+    }
+
+    const quality_step = b.step("quality", "Run quality gate checks");
+    quality_step.dependOn(&quality_cmd.step);
+
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means
