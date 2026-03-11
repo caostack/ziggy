@@ -1,6 +1,17 @@
 # Ziggy
 
-A toy terminal text editor written in Zig.
+A toy terminal text editor written in Zig, following Zig's design philosophy.
+
+## Zig Philosophy
+
+This project strictly follows Zig's design principles:
+- ✅ **Explicit** - No hidden allocations or magic
+- ✅ **Manual Resource Management** - All resources managed with `defer`
+- ✅ **Performance Transparent** - Zero-copy, slice-based
+- ✅ **Comptime** - Leverage compile-time computation
+- ✅ **Simple** - No OOP abstractions, just structs and functions
+
+See [ZIG_PHILOSOPHY.md](ZIG_PHILOSOPHY.md) for details.
 
 ## Features
 
