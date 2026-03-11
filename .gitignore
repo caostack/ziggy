@@ -1,6 +1,10 @@
 # Zig build outputs
+.zig-cache/
 zig-cache/
 zig-out/
+
+# Claude local settings
+.claude/settings.local.json
 
 # Zig local build files
 *.o
