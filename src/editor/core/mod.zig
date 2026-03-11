@@ -22,6 +22,7 @@ pub const Transaction = transaction.Transaction;
 pub const UndoStack = transaction.UndoStack;
 
 pub const Viewport = viewport.Viewport;
+pub const LineRange = viewport.LineRange;
 
 // Re-export test helper
 test {

@@ -105,8 +105,11 @@ pub const GapBuffer = struct {
             self.gap_start;
 
         // Adjust for gap
+        // start < gap_start: content is before gap, no adjustment needed
+        // start >= gap_start: content is after gap, skip over gap
         const adjusted_start = if (start < self.gap_start) start else start + (self.gap_end - self.gap_start);
-        const adjusted_end = if (end < self.gap_start) end else end + (self.gap_end - self.gap_start);
+        // end can equal gap_start for the last line, so use <=
+        const adjusted_end = if (end <= self.gap_start) end else end + (self.gap_end - self.gap_start);
 
         if (adjusted_start >= adjusted_end) return "";
         return self.data[adjusted_start..adjusted_end];
@@ -349,33 +352,31 @@ pub const GapBuffer = struct {
     // Document VTable implementation
     // ========================================================================
 
-    /// Get the VTable for Document interface
-    pub fn vtable() DocumentVTable {
-        return .{
-            .deinit = vtableDeinit,
-            .getLine = vtableGetLine,
-            .getLineCount = vtableGetLineCount,
-            .getLineLength = vtableGetLineLength,
-            .insertAt = vtableInsertAt,
-            .deleteRange = vtableDeleteRange,
-            .getCharAt = vtableGetCharAt,
-            .getTotalLength = vtableGetTotalLength,
-            .isModified = vtableIsModified,
-            .clearModified = vtableClearModified,
-            .toSlice = vtableToSlice,
-            .getCursorRow = vtableGetCursorRow,
-            .getCursorCol = vtableGetCursorCol,
-            .setCursor = vtableSetCursor,
-            .moveCursorUp = vtableMoveCursorUp,
-            .moveCursorDown = vtableMoveCursorDown,
-            .moveCursorLeft = vtableMoveCursorLeft,
-            .moveCursorRight = vtableMoveCursorRight,
-        };
-    }
+    /// Static VTable for Document interface (must be static to avoid dangling pointer)
+    pub const vtable = DocumentVTable{
+        .deinit = vtableDeinit,
+        .getLine = vtableGetLine,
+        .getLineCount = vtableGetLineCount,
+        .getLineLength = vtableGetLineLength,
+        .insertAt = vtableInsertAt,
+        .deleteRange = vtableDeleteRange,
+        .getCharAt = vtableGetCharAt,
+        .getTotalLength = vtableGetTotalLength,
+        .isModified = vtableIsModified,
+        .clearModified = vtableClearModified,
+        .toSlice = vtableToSlice,
+        .getCursorRow = vtableGetCursorRow,
+        .getCursorCol = vtableGetCursorCol,
+        .setCursor = vtableSetCursor,
+        .moveCursorUp = vtableMoveCursorUp,
+        .moveCursorDown = vtableMoveCursorDown,
+        .moveCursorLeft = vtableMoveCursorLeft,
+        .moveCursorRight = vtableMoveCursorRight,
+    };
 
     /// Create Document wrapper
     pub fn document(self: *Self) Document {
-        return Document.init(self, @constCast(&vtable()));
+        return Document.init(self, @constCast(&vtable));
     }
 
     // VTable implementations

@@ -359,33 +359,31 @@ pub const PieceTable = struct {
     // Document VTable implementation
     // ========================================================================
 
-    /// Get the VTable for Document interface
-    pub fn vtable() DocumentVTable {
-        return .{
-            .deinit = vtableDeinit,
-            .getLine = vtableGetLine,
-            .getLineCount = vtableGetLineCount,
-            .getLineLength = vtableGetLineLength,
-            .insertAt = vtableInsertAt,
-            .deleteRange = vtableDeleteRange,
-            .getCharAt = vtableGetCharAt,
-            .getTotalLength = vtableGetTotalLength,
-            .isModified = vtableIsModified,
-            .clearModified = vtableClearModified,
-            .toSlice = vtableToSlice,
-            .getCursorRow = vtableGetCursorRow,
-            .getCursorCol = vtableGetCursorCol,
-            .setCursor = vtableSetCursor,
-            .moveCursorUp = vtableMoveCursorUp,
-            .moveCursorDown = vtableMoveCursorDown,
-            .moveCursorLeft = vtableMoveCursorLeft,
-            .moveCursorRight = vtableMoveCursorRight,
-        };
-    }
+    /// Static VTable for Document interface (must be static to avoid dangling pointer)
+    pub const vtable = DocumentVTable{
+        .deinit = vtableDeinit,
+        .getLine = vtableGetLine,
+        .getLineCount = vtableGetLineCount,
+        .getLineLength = vtableGetLineLength,
+        .insertAt = vtableInsertAt,
+        .deleteRange = vtableDeleteRange,
+        .getCharAt = vtableGetCharAt,
+        .getTotalLength = vtableGetTotalLength,
+        .isModified = vtableIsModified,
+        .clearModified = vtableClearModified,
+        .toSlice = vtableToSlice,
+        .getCursorRow = vtableGetCursorRow,
+        .getCursorCol = vtableGetCursorCol,
+        .setCursor = vtableSetCursor,
+        .moveCursorUp = vtableMoveCursorUp,
+        .moveCursorDown = vtableMoveCursorDown,
+        .moveCursorLeft = vtableMoveCursorLeft,
+        .moveCursorRight = vtableMoveCursorRight,
+    };
 
     /// Create Document wrapper
     pub fn document(self: *Self) Document {
-        return Document.init(self, @constCast(&vtable()));
+        return Document.init(self, @constCast(&vtable));
     }
 
     // VTable implementations

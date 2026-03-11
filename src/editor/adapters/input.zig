@@ -174,17 +174,15 @@ pub const NativeInput = struct {
     // VTable implementation
     // ========================================================================
 
-    /// Get VTable for Input interface
-    pub fn vtable() InputVTable {
-        return .{
-            .readKey = vtableReadKey,
-            .deinit = vtableDeinit,
-        };
-    }
+    /// Static VTable for Input interface (must be static to avoid dangling pointer)
+    pub const vtable = InputVTable{
+        .readKey = vtableReadKey,
+        .deinit = vtableDeinit,
+    };
 
     /// Create Input wrapper
     pub fn input(self: *Self) Input {
-        return Input.init(self, @constCast(&vtable()));
+        return Input.init(self, @constCast(&vtable));
     }
 
     fn vtableReadKey(ptr: *anyopaque) InputError!Key {

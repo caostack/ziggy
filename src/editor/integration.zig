@@ -181,7 +181,7 @@ pub const EditorState = struct {
     }
 
     /// Get visible line range for rendering
-    pub fn getVisibleRange(self: Self) struct { start: usize, end: usize } {
+    pub fn getVisibleRange(self: Self) core.LineRange {
         return self.viewport.getVisibleRange(self.document.getLineCount());
     }
 
@@ -268,7 +268,7 @@ pub const FullEditor = struct {
         input: Input,
         filesystem: FileSystem,
     ) !Self {
-        const window_size = terminal.getWindowSize() catch .{ .rows = 24, .cols = 80 };
+        const window_size = terminal.getWindowSize() catch adapters.WindowSize{ .rows = 24, .cols = 80 };
 
         var state = try EditorState.init(allocator, window_size.rows, window_size.cols);
         errdefer state.deinit();
@@ -293,7 +293,7 @@ pub const FullEditor = struct {
         filesystem: FileSystem,
         filename: []const u8,
     ) !Self {
-        const window_size = terminal.getWindowSize() catch .{ .rows = 24, .cols = 80 };
+        const window_size = terminal.getWindowSize() catch adapters.WindowSize{ .rows = 24, .cols = 80 };
 
         // Load file content
         const content = filesystem.open(allocator, filename) catch |err| {
@@ -411,8 +411,7 @@ pub const FullEditor = struct {
         try self.refresh();
 
         // Read key
-        const key = self.input.readKey() catch |err| {
-            _ = err;
+        const key = self.input.readKey() catch {
             return true; // Continue on read error
         };
 
@@ -528,4 +527,172 @@ test "FullEditor - handleKey character insert" {
 
     const line = state.document.getLine(0).?;
     try std.testing.expectEqualStrings("Hi", line);
+}
+
+// ============================================================================
+// Real User Scenario Tests
+// ============================================================================
+
+test "FullEditor - complete lifecycle with mock adapters" {
+    const allocator = std.testing.allocator;
+
+    // 1. Setup mock adapters (simulates user starting the editor)
+    var mock_term = adapters.MockTerminal.init(allocator);
+    defer mock_term.deinit();
+    var mock_input = adapters.MockInput.init(allocator);
+    defer mock_input.deinit(allocator);
+    var mock_fs = adapters.MockFileSystem.init(allocator);
+    defer mock_fs.deinit();
+
+    // 2. Create editor
+    var editor = try FullEditor.init(
+        allocator,
+        mock_term.terminal(),
+        mock_input.input(),
+        mock_fs.fileSystem(),
+    );
+    defer editor.deinit(); // This should NOT crash!
+
+    // 3. Verify initial state
+    try std.testing.expect(!editor.isModified());
+    try std.testing.expect(!editor.shouldQuit());
+}
+
+test "FullEditor - user types and quits" {
+    const allocator = std.testing.allocator;
+
+    var mock_term = adapters.MockTerminal.init(allocator);
+    defer mock_term.deinit();
+    var mock_input = adapters.MockInput.init(allocator);
+    defer mock_input.deinit(allocator);
+    var mock_fs = adapters.MockFileSystem.init(allocator);
+    defer mock_fs.deinit();
+
+    // User types "Hi" then Ctrl+C to quit
+    try mock_input.addChar(allocator, "H");
+    try mock_input.addChar(allocator, "i");
+    try mock_input.addKey(allocator, .ctrl_c);
+
+    var editor = try FullEditor.init(
+        allocator,
+        mock_term.terminal(),
+        mock_input.input(),
+        mock_fs.fileSystem(),
+    );
+    defer editor.deinit();
+
+    // Step through: first key inserts "H"
+    try std.testing.expect(try editor.step());
+    try std.testing.expect(editor.isModified());
+
+    // Step through: second key inserts "i"
+    try std.testing.expect(try editor.step());
+
+    // Step through: Ctrl+C quits
+    try std.testing.expect(!try editor.step());
+    try std.testing.expect(editor.shouldQuit());
+}
+
+test "FullEditor - open file, edit, save" {
+    const allocator = std.testing.allocator;
+
+    var mock_term = adapters.MockTerminal.init(allocator);
+    defer mock_term.deinit();
+    var mock_input = adapters.MockInput.init(allocator);
+    defer mock_input.deinit(allocator);
+    var mock_fs = adapters.MockFileSystem.init(allocator);
+    defer mock_fs.deinit();
+
+    // Pre-populate filesystem with a file
+    try mock_fs.createFile("test.txt", "Hello World");
+
+    // User opens file, types "!", then saves
+    try mock_input.addChar(allocator, "!");
+    try mock_input.addKey(allocator, .ctrl_s);
+    try mock_input.addKey(allocator, .ctrl_q);
+
+    var editor = try FullEditor.initFile(
+        allocator,
+        mock_term.terminal(),
+        mock_input.input(),
+        mock_fs.fileSystem(),
+        "test.txt",
+    );
+    defer editor.deinit();
+
+    // Verify file was loaded
+    try std.testing.expect(!editor.isModified());
+
+    // Step: insert "!"
+    _ = try editor.step();
+    try std.testing.expect(editor.isModified());
+
+    // Step: save
+    _ = try editor.step();
+    try std.testing.expect(!editor.isModified());
+
+    // Verify file was saved with new content
+    const content = try mock_fs.open(allocator, "test.txt");
+    defer allocator.free(content);
+    try std.testing.expect(content.len > 0);
+}
+
+test "FullEditor - multiple cycles of edit and undo" {
+    const allocator = std.testing.allocator;
+
+    var mock_term = adapters.MockTerminal.init(allocator);
+    defer mock_term.deinit();
+    var mock_input = adapters.MockInput.init(allocator);
+    defer mock_input.deinit(allocator);
+    var mock_fs = adapters.MockFileSystem.init(allocator);
+    defer mock_fs.deinit();
+
+    var editor = try FullEditor.init(
+        allocator,
+        mock_term.terminal(),
+        mock_input.input(),
+        mock_fs.fileSystem(),
+    );
+    defer editor.deinit();
+
+    // Insert some text directly
+    try editor.state.insert("ABC");
+    try std.testing.expect(editor.state.canUndo());
+
+    // Undo should work
+    try std.testing.expect(editor.state.undo());
+    try std.testing.expect(!editor.state.canUndo());
+}
+
+test "FullEditor - error during refresh doesn't crash deinit" {
+    // This test simulates the original bug:
+    // 1. An error occurs during refresh (WriteFailed)
+    // 2. deinit() is called afterwards
+    // 3. deinit should NOT crash with segfault
+
+    const allocator = std.testing.allocator;
+
+    var mock_term = adapters.MockTerminal.init(allocator);
+    defer mock_term.deinit();
+    var mock_input = adapters.MockInput.init(allocator);
+    defer mock_input.deinit(allocator);
+    var mock_fs = adapters.MockFileSystem.init(allocator);
+    defer mock_fs.deinit();
+
+    // Add a key that will trigger refresh
+    try mock_input.addKey(allocator, .ctrl_c);
+
+    var editor = try FullEditor.init(
+        allocator,
+        mock_term.terminal(),
+        mock_input.input(),
+        mock_fs.fileSystem(),
+    );
+    // The key test: deinit() must work even if refresh had issues
+    defer editor.deinit();
+
+    // Step through once
+    _ = try editor.step();
+
+    // Now deinit() will be called - this used to crash!
 }

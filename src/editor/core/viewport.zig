@@ -1,6 +1,12 @@
 //! Viewport - rendering state and scrolling logic
 //! Manages what portion of the document is visible on screen
 
+/// Line range for visible content
+pub const LineRange = struct {
+    start: usize,
+    end: usize,
+};
+
 /// Viewport - tracks visible portion of document
 pub const Viewport = struct {
     /// Screen dimensions
@@ -156,7 +162,7 @@ pub const Viewport = struct {
     }
 
     /// Get visible line range (start, end exclusive)
-    pub fn getVisibleRange(self: Self, total_lines: usize) struct { start: usize, end: usize } {
+    pub fn getVisibleRange(self: Self, total_lines: usize) LineRange {
         return .{
             .start = self.first_line,
             .end = @min(self.first_line + self.contentLines(), total_lines),

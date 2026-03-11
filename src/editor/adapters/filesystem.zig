@@ -128,19 +128,17 @@ pub const NativeFileSystem = struct {
     // VTable implementation
     // ========================================================================
 
-    /// Get VTable for FileSystem interface
-    pub fn vtable() FileSystemVTable {
-        return .{
-            .open = vtableOpen,
-            .save = vtableSave,
-            .exists = vtableExists,
-            .deinit = vtableDeinit,
-        };
-    }
+    /// Static VTable for FileSystem interface (must be static to avoid dangling pointer)
+    pub const vtable = FileSystemVTable{
+        .open = vtableOpen,
+        .save = vtableSave,
+        .exists = vtableExists,
+        .deinit = vtableDeinit,
+    };
 
     /// Create FileSystem wrapper
     pub fn fileSystem(self: *Self) FileSystem {
-        return FileSystem.init(self, @constCast(&vtable()));
+        return FileSystem.init(self, @constCast(&vtable));
     }
 
     fn vtableOpen(ptr: *anyopaque, allocator: Allocator, path: []const u8) FileError![]const u8 {

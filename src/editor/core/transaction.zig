@@ -71,6 +71,7 @@ pub const Operation = union(enum) {
 
 /// Transaction - a group of operations that can be undone together
 pub const Transaction = struct {
+    allocator: Allocator,
     operations: ArrayList(Operation),
     description: ?[]const u8,
 
@@ -79,7 +80,8 @@ pub const Transaction = struct {
     /// Create empty transaction
     pub fn init(allocator: Allocator) Self {
         return .{
-            .operations = ArrayList(Operation).init(allocator),
+            .allocator = allocator,
+            .operations = .{},
             .description = null,
         };
     }
@@ -87,26 +89,26 @@ pub const Transaction = struct {
     /// Free all resources
     pub fn deinit(self: *Self) void {
         for (self.operations.items) |*op| {
-            op.deinit(self.operations.allocator);
+            op.deinit(self.allocator);
         }
-        self.operations.deinit();
+        self.operations.deinit(self.allocator);
         if (self.description) |desc| {
-            self.operations.allocator.free(desc);
+            self.allocator.free(desc);
         }
     }
 
     /// Set description for this transaction
     pub fn setDescription(self: *Self, desc: []const u8) !void {
         if (self.description) |d| {
-            self.operations.allocator.free(d);
+            self.allocator.free(d);
         }
-        self.description = try self.operations.allocator.dupe(u8, desc);
+        self.description = try self.allocator.dupe(u8, desc);
     }
 
     /// Add an insert operation (takes ownership of text)
     pub fn addInsert(self: *Self, pos: usize, text: []const u8) !void {
-        const owned = try self.operations.allocator.dupe(u8, text);
-        try self.operations.append(.{
+        const owned = try self.allocator.dupe(u8, text);
+        try self.operations.append(self.allocator, .{
             .insert = .{
                 .pos = pos,
                 .text = owned,
@@ -116,8 +118,8 @@ pub const Transaction = struct {
 
     /// Add a delete operation (takes ownership of deleted_text)
     pub fn addDelete(self: *Self, start: usize, end: usize, deleted_text: []const u8) !void {
-        const owned = try self.operations.allocator.dupe(u8, deleted_text);
-        try self.operations.append(.{
+        const owned = try self.allocator.dupe(u8, deleted_text);
+        try self.operations.append(self.allocator, .{
             .delete = .{
                 .start = start,
                 .end = end,
@@ -128,7 +130,7 @@ pub const Transaction = struct {
 
     /// Add an operation (takes ownership)
     pub fn addOperation(self: *Self, op: Operation) !void {
-        try self.operations.append(op);
+        try self.operations.append(self.allocator, op);
     }
 
     /// Check if transaction is empty
@@ -144,7 +146,7 @@ pub const Transaction = struct {
     /// Build the inverse transaction (for undo)
     /// Operations are inverted in reverse order
     pub fn buildInverse(self: Self) !Self {
-        var inverse = Self.init(self.operations.allocator);
+        var inverse = Self.init(self.allocator);
         errdefer inverse.deinit();
 
         // Process operations in reverse order
@@ -152,8 +154,8 @@ pub const Transaction = struct {
         while (i > 0) {
             i -= 1;
             const op = self.operations.items[i];
-            const inverted = try op.invert(self.operations.allocator);
-            try inverse.operations.append(inverted);
+            const inverted = try op.invert(self.allocator);
+            try inverse.operations.append(self.allocator, inverted);
         }
 
         if (self.description) |desc| {
@@ -166,6 +168,7 @@ pub const Transaction = struct {
 
 /// Undo/Redo stack
 pub const UndoStack = struct {
+    allocator: Allocator,
     undo_stack: ArrayList(Transaction),
     redo_stack: ArrayList(Transaction),
     max_depth: usize,
@@ -175,8 +178,9 @@ pub const UndoStack = struct {
     /// Create new undo stack
     pub fn init(allocator: Allocator) Self {
         return .{
-            .undo_stack = ArrayList(Transaction).init(allocator),
-            .redo_stack = ArrayList(Transaction).init(allocator),
+            .allocator = allocator,
+            .undo_stack = .{},
+            .redo_stack = .{},
             .max_depth = 100, // Default max undo history
         };
     }
@@ -187,13 +191,13 @@ pub const UndoStack = struct {
         for (self.undo_stack.items) |*tx| {
             tx.deinit();
         }
-        self.undo_stack.deinit();
+        self.undo_stack.deinit(self.allocator);
 
         // Free redo stack
         for (self.redo_stack.items) |*tx| {
             tx.deinit();
         }
-        self.redo_stack.deinit();
+        self.redo_stack.deinit(self.allocator);
     }
 
     /// Push a transaction onto the undo stack
@@ -208,7 +212,7 @@ pub const UndoStack = struct {
             old.deinit();
         }
 
-        try self.undo_stack.append(tx);
+        try self.undo_stack.append(self.allocator, tx);
     }
 
     /// Pop from undo stack and push inverse to redo stack
@@ -219,12 +223,12 @@ pub const UndoStack = struct {
         var tx = self.undo_stack.pop();
         const inverse = tx.buildInverse() catch {
             // Failed to build inverse, push back
-            self.undo_stack.append(tx) catch {};
+            self.undo_stack.append(self.allocator, tx) catch {};
             return null;
         };
 
         // Move original to redo stack
-        self.redo_stack.append(tx) catch {
+        self.redo_stack.append(self.allocator, tx) catch {
             tx.deinit();
         };
 
@@ -239,12 +243,12 @@ pub const UndoStack = struct {
         var tx = self.redo_stack.pop();
         const inverse = tx.buildInverse() catch {
             // Failed to build inverse, push back
-            self.redo_stack.append(tx) catch {};
+            self.redo_stack.append(self.allocator, tx) catch {};
             return null;
         };
 
         // Move original back to undo stack
-        self.undo_stack.append(tx) catch {
+        self.undo_stack.append(self.allocator, tx) catch {
             tx.deinit();
         };
 

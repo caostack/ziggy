@@ -35,9 +35,6 @@ pub const TerminalVTable = struct {
 
     /// Write string to terminal
     writeAll: *const fn (*anyopaque, []const u8) TerminalError!void,
-
-    /// Formatted write
-    print: *const fn (*anyopaque, []const u8, anytype) TerminalError!void,
 };
 
 /// Terminal interface - wraps any terminal adapter implementation
@@ -86,18 +83,13 @@ pub const Terminal = struct {
     }
 
     /// Get window size
-    pub fn getWindowSize(self: *Self) TerminalError!WindowSize {
+    pub fn getWindowSize(self: *const Self) TerminalError!WindowSize {
         return self.vtable.getWindowSize(self.ptr);
     }
 
     /// Write string
     pub fn writeAll(self: Self, s: []const u8) TerminalError!void {
         return self.vtable.writeAll(self.ptr, s);
-    }
-
-    /// Formatted print
-    pub fn print(self: *Self, comptime fmt: []const u8, args: anytype) TerminalError!void {
-        return self.vtable.print(self.ptr, fmt, args);
     }
 };
 
@@ -301,35 +293,25 @@ pub const NativeTerminal = struct {
         stdout.writeAll(s) catch return TerminalError.WriteFailed;
     }
 
-    pub fn print(self: *Self, comptime fmt: []const u8, args: anytype) TerminalError!void {
-        _ = self;
-        var buf: [256]u8 = undefined;
-        const output = std.fmt.bufPrint(&buf, fmt, args) catch return TerminalError.WriteFailed;
-        try writeAllNative(output);
-    }
-
     // ========================================================================
     // VTable implementation
     // ========================================================================
 
-    /// Get VTable for Terminal interface
-    pub fn vtable() TerminalVTable {
-        return .{
-            .deinit = vtableDeinit,
-            .clearScreen = vtableClearScreen,
-            .clearLine = vtableClearLine,
-            .moveCursor = vtableMoveCursor,
-            .hideCursor = vtableHideCursor,
-            .showCursor = vtableShowCursor,
-            .getWindowSize = vtableGetWindowSize,
-            .writeAll = vtableWriteAll,
-            .print = vtablePrint,
-        };
-    }
+    /// Static VTable for Terminal interface (must be static to avoid dangling pointer)
+    pub const vtable = TerminalVTable{
+        .deinit = vtableDeinit,
+        .clearScreen = vtableClearScreen,
+        .clearLine = vtableClearLine,
+        .moveCursor = vtableMoveCursor,
+        .hideCursor = vtableHideCursor,
+        .showCursor = vtableShowCursor,
+        .getWindowSize = vtableGetWindowSize,
+        .writeAll = vtableWriteAll,
+    };
 
     /// Create Terminal wrapper
     pub fn terminal(self: *Self) Terminal {
-        return Terminal.init(self, @constCast(&vtable()));
+        return Terminal.init(self, @constCast(&vtable));
     }
 
     fn vtableDeinit(ptr: *anyopaque) void {
@@ -370,15 +352,6 @@ pub const NativeTerminal = struct {
     fn vtableWriteAll(ptr: *anyopaque, s: []const u8) TerminalError!void {
         const self: *Self = @ptrCast(@alignCast(ptr));
         return self.writeAll(s);
-    }
-
-    fn vtablePrint(ptr: *anyopaque, fmt: []const u8, args: anytype) TerminalError!void {
-        const self: *Self = @ptrCast(@alignCast(ptr));
-        _ = fmt;
-        // Note: In VTable, we lose compile-time format checking
-        // This is a simplified implementation
-        _ = self;
-        _ = args;
     }
 };
 
