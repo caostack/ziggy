@@ -144,7 +144,8 @@ pub const Input = struct {
         };
     }
 
-    fn parseControlCharacter(byte: u8) Key {
+    /// Parse control character to Key (public for testing)
+    pub fn parseControlCharacter(byte: u8) Key {
         // Ctrl+ keys: Ctrl+C = 3, Ctrl+S = 19, etc.
         return switch (byte) {
             3 => .ctrl_c,
@@ -157,14 +158,14 @@ pub const Input = struct {
 };
 
 test "parse control characters" {
-    // Test control character parsing
-    const input = Input.init();
-
-    // These values should map correctly
-    try std.testing.expectEqual(Key.ctrl_c, input.parseControlCharacter(3));
-    try std.testing.expectEqual(Key.ctrl_s, input.parseControlCharacter(19));
-    try std.testing.expectEqual(Key.ctrl_q, input.parseControlCharacter(17));
-    try std.testing.expectEqual(Key.ctrl_f, input.parseControlCharacter(6));
+    // Test control character parsing via the public parseControlCharacter function
+    // Ctrl+C = byte 3, Ctrl+S = byte 19, Ctrl+Q = byte 17, Ctrl+F = byte 6
+    try std.testing.expectEqual(Key.ctrl_c, Input.parseControlCharacter(3));
+    try std.testing.expectEqual(Key.ctrl_s, Input.parseControlCharacter(19));
+    try std.testing.expectEqual(Key.ctrl_q, Input.parseControlCharacter(17));
+    try std.testing.expectEqual(Key.ctrl_f, Input.parseControlCharacter(6));
+    try std.testing.expectEqual(Key.unknown, Input.parseControlCharacter(0));
+    try std.testing.expectEqual(Key.unknown, Input.parseControlCharacter(1));
 }
 
 test "utf8 byte sequence length" {
@@ -180,4 +181,19 @@ test "utf8 byte sequence length" {
 
     const seq_len4 = std.unicode.utf8ByteSequenceLength(0xF0); // Start of 4-byte sequence
     try std.testing.expectEqual(@as(usize, 4), seq_len4 catch 0);
+}
+
+test "Key union - character storage" {
+    var key = Key{ .character = .{ 'A', 0, 0, 0 } };
+    try std.testing.expectEqual(@as(u8, 'A'), key.character[0]);
+
+    // Multi-byte UTF-8 (é = 0xC3 0xA9)
+    key = Key{ .character = .{ 0xC3, 0xA9, 0, 0 } };
+    try std.testing.expectEqual(@as(u8, 0xC3), key.character[0]);
+    try std.testing.expectEqual(@as(u8, 0xA9), key.character[1]);
+}
+
+test "Input.init" {
+    const input = Input.init();
+    try std.testing.expect(input.stdin_file.handle >= 0);
 }

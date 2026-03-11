@@ -1,33 +1,107 @@
 //! Terminal handling for raw mode and ANSI escape sequences
+//! Supports both Windows and Linux platforms
 const std = @import("std");
+const builtin = @import("builtin");
+
+const native_os = builtin.os.tag;
+const windows = std.os.windows;
+const linux = std.os.linux;
 
 pub const TerminalError = error{
     NotATTY,
     IoctlFailed,
     WriteFailed,
+    GetConsoleModeFailed,
+    SetConsoleModeFailed,
 };
 
-/// Terminal state before enabling raw mode
-const OriginalTermios = struct {
-    termios: std.os.linux.termios,
-    is_valid: bool,
+/// Window size structure
+pub const WindowSize = struct {
+    rows: usize,
+    cols: usize,
+};
+
+/// Platform-specific original terminal state
+const OriginalState = union(enum) {
+    linux: linux.termios,
+    windows: struct {
+        input_mode: u32,
+        output_mode: u32,
+    },
+    none: void,
 };
 
 pub const Terminal = struct {
-    original_state: OriginalTermios,
+    original_state: OriginalState,
     stdout_handle: std.fs.File.Handle,
-    write_buffer: [1024]u8,
+    stdin_handle: std.fs.File.Handle,
+    is_valid: bool,
 
     /// Enable raw mode (disable echo, canonical mode, signals)
     pub fn enableRawMode() !Terminal {
         const stdout = std.fs.File.stdout();
+        const stdin = std.fs.File.stdin();
 
         // Check if TTY
         if (!stdout.isTty()) return TerminalError.NotATTY;
 
+        if (native_os == .windows) {
+            return enableRawModeWindows(stdin, stdout);
+        } else {
+            return enableRawModeLinux(stdin, stdout);
+        }
+    }
+
+    fn enableRawModeWindows(stdin: std.fs.File, stdout: std.fs.File) !Terminal {
+        // Get current console modes
+        var input_mode: u32 = undefined;
+        var output_mode: u32 = undefined;
+
+        if (windows.kernel32.GetConsoleMode(stdin.handle, &input_mode) == windows.FALSE) {
+            return TerminalError.GetConsoleModeFailed;
+        }
+        if (windows.kernel32.GetConsoleMode(stdout.handle, &output_mode) == windows.FALSE) {
+            return TerminalError.GetConsoleModeFailed;
+        }
+
+        // Save original state
+        const original = OriginalState{ .windows = .{
+            .input_mode = input_mode,
+            .output_mode = output_mode,
+        } };
+
+        // Set raw input mode:
+        // Disable ENABLE_LINE_INPUT (0x0002) - raw input
+        // Disable ENABLE_ECHO_INPUT (0x0004) - no echo
+        // Disable ENABLE_PROCESSED_INPUT (0x0001) - no Ctrl+C processing
+        // Keep ENABLE_VIRTUAL_TERMINAL_INPUT (0x0200) for ANSI sequences
+        const raw_input_mode: u32 = input_mode & ~(@as(u32, 0x0001 | 0x0002 | 0x0004));
+
+        // Enable virtual terminal processing for output (ANSI escape sequences)
+        const ENABLE_VIRTUAL_TERMINAL_PROCESSING: u32 = 0x0004;
+        const raw_output_mode: u32 = output_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+
+        if (windows.kernel32.SetConsoleMode(stdin.handle, raw_input_mode) == windows.FALSE) {
+            return TerminalError.SetConsoleModeFailed;
+        }
+        if (windows.kernel32.SetConsoleMode(stdout.handle, raw_output_mode) == windows.FALSE) {
+            return TerminalError.SetConsoleModeFailed;
+        }
+
+        return .{
+            .original_state = original,
+            .stdout_handle = stdout.handle,
+            .stdin_handle = stdin.handle,
+            .is_valid = true,
+        };
+    }
+
+    fn enableRawModeLinux(stdin: std.fs.File, stdout: std.fs.File) !Terminal {
         // Get current termios
-        var original_termios: std.os.linux.termios = undefined;
-        const err = std.os.linux.tcgetattr(stdout.handle, &original_termios);
+        var original_termios: linux.termios = undefined;
+        const fd: i32 = @intCast(stdout.handle);
+
+        const err = linux.tcgetattr(fd, &original_termios);
         if (std.posix.errno(err) != .SUCCESS) return TerminalError.IoctlFailed;
 
         // Create copy for modification
@@ -51,24 +125,38 @@ pub const Terminal = struct {
         raw.cc[5] = 0;
 
         // Apply raw mode
-        const err2 = std.os.linux.tcsetattr(stdout.handle, .NOW, &raw);
+        const err2 = linux.tcsetattr(fd, .NOW, &raw);
         if (std.posix.errno(err2) != .SUCCESS) return TerminalError.IoctlFailed;
 
         return .{
-            .original_state = .{
-                .termios = original_termios,
-                .is_valid = true,
-            },
+            .original_state = OriginalState{ .linux = original_termios },
             .stdout_handle = stdout.handle,
-            .write_buffer = undefined,
+            .stdin_handle = stdin.handle,
+            .is_valid = true,
         };
     }
 
     /// Restore original terminal settings
     pub fn disableRawMode(self: Terminal) void {
-        if (!self.original_state.is_valid) return;
+        if (!self.is_valid) return;
 
-        _ = std.os.linux.tcsetattr(self.stdout_handle, .NOW, &self.original_state.termios);
+        if (native_os == .windows) {
+            switch (self.original_state) {
+                .windows => |state| {
+                    _ = windows.kernel32.SetConsoleMode(self.stdin_handle, state.input_mode);
+                    _ = windows.kernel32.SetConsoleMode(self.stdout_handle, state.output_mode);
+                },
+                else => {},
+            }
+        } else {
+            switch (self.original_state) {
+                .linux => |state| {
+                    const fd: i32 = @intCast(self.stdout_handle);
+                    _ = linux.tcsetattr(fd, .NOW, &state);
+                },
+                else => {},
+            }
+        }
     }
 
     /// Clear entire screen
@@ -99,13 +187,30 @@ pub const Terminal = struct {
     }
 
     /// Get terminal window size
-    pub fn getWindowSize(self: *Terminal) !struct { rows: usize, cols: usize } {
+    pub fn getWindowSize(self: *Terminal) TerminalError!WindowSize {
+        if (native_os == .windows) {
+            return self.getWindowSizeWindows();
+        } else {
+            return self.getWindowSizeLinux();
+        }
+    }
+
+    fn getWindowSizeWindows(self: *Terminal) TerminalError!WindowSize {
+        var info: windows.CONSOLE_SCREEN_BUFFER_INFO = undefined;
+        if (windows.kernel32.GetConsoleScreenBufferInfo(self.stdout_handle, &info) == windows.FALSE) {
+            return TerminalError.IoctlFailed;
+        }
+
+        return .{
+            .rows = @intCast(info.dwSize.Y),
+            .cols = @intCast(info.dwSize.X),
+        };
+    }
+
+    fn getWindowSizeLinux(self: *Terminal) TerminalError!WindowSize {
         var ws: std.posix.winsize = undefined;
-        const err = std.os.linux.ioctl(
-            self.stdout_handle,
-            std.os.linux.T.IOCGWINSZ,
-            @intFromPtr(&ws),
-        );
+        const fd: i32 = @intCast(self.stdout_handle);
+        const err = linux.ioctl(fd, linux.T.IOCGWINSZ, @intFromPtr(&ws));
         if (std.posix.errno(err) != .SUCCESS) return TerminalError.IoctlFailed;
 
         return .{

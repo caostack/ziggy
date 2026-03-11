@@ -284,7 +284,7 @@ test "buffer insert ascii" {
     try buffer.insert("World");
 
     try std.testing.expectEqual(@as(usize, 11), buffer.gap_start);
-    try std.testing.expectEqual(@as(usize, 1), buffer.lines.items.len);
+    try std.testing.expectEqual(@as(usize, 1), buffer.line_count);
 }
 
 test "buffer insert newlines" {
@@ -295,7 +295,7 @@ test "buffer insert newlines" {
     try buffer.insert("Line 2\n");
     try buffer.insert("Line 3");
 
-    try std.testing.expectEqual(@as(usize, 3), buffer.lines.items.len);
+    try std.testing.expectEqual(@as(usize, 3), buffer.line_count);
     try std.testing.expectEqual(@as(usize, 2), buffer.cursor_row);
 }
 
