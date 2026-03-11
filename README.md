@@ -42,9 +42,27 @@ zig build run
 zig build run -- your-file.txt
 ```
 
-## Quality Gate
+## Quality Gate (Enforced)
 
-This project uses a quality gate system to ensure code quality. Run it before committing:
+This project enforces Zig's design philosophy through quality gates:
+
+### Local (Fast Feedback)
+```bash
+./quality-gate.sh
+```
+
+### CI/CD (Enforced)
+- GitHub Actions automatically checks every PR
+- Failing quality gates **block merging** to `main`
+- See `.github/workflows/quality-gate.yml`
+
+### Setup Branch Protection
+```bash
+# Follow instructions to enable enforced checks
+./setup-branch-protection.sh
+```
+
+See [QUALITY_GATE.md](QUALITY_GATE.md) and [ZIG_PHILOSOPHY.md](ZIG_PHILOSOPHY.md).
 
 ```bash
 ./quality-gate.sh
