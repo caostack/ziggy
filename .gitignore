@@ -1,0 +1,11 @@
+# Zig build outputs
+zig-cache/
+zig-out/
+
+# Zig local build files
+*.o
+*.a
+*.exe
+*.dll
+*.so
+*.dylib
