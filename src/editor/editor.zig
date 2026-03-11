@@ -44,7 +44,6 @@ pub const Editor = struct {
         var loaded_content: ?[]const u8 = null;
         if (filename) |path| {
             const content = FileIO.open(allocator, path) catch |err| {
-                std.debug.print("Failed to open '{s}': {}\n", .{ path, err });
                 return EditorError.OpenFailed;
             };
             loaded_content = content;
@@ -95,7 +94,6 @@ pub const Editor = struct {
             // Refresh screen
             self.screen.refresh(self.buffer, self.filename, self.modified) catch |err| {
                 // If refresh fails, try to restore terminal and exit
-                std.debug.print("Screen refresh failed: {}\n", .{err});
                 return err;
             };
 
@@ -106,8 +104,6 @@ pub const Editor = struct {
             self.handleKey(key) catch |err| {
                 if (err == EditorError.Quit) {
                     self.should_quit = true;
-                } else {
-                    std.debug.print("Error handling key: {}\n", .{err});
                 }
             };
         }
@@ -192,13 +188,11 @@ pub const Editor = struct {
     fn saveFile(self: *Editor) !void {
         const path = self.filename orelse {
             // No filename - can't save
-            std.debug.print("No filename - cannot save\n", .{});
             return EditorError.SaveFailed;
         };
 
         const content = self.buffer.toSlice();
         FileIO.save(path, content) catch |err| {
-            std.debug.print("Failed to save '{s}': {}\n", .{ path, err });
             return EditorError.SaveFailed;
         };
 
