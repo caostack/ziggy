@@ -30,6 +30,10 @@ Thumbs.db
 *.md
 !README.md
 
+# Git temporary directories
+.git-rewrite/
+.git-rewrite
+
 # GitHub specific
 .github/
 
