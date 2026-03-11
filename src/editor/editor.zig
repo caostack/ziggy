@@ -43,7 +43,7 @@ pub const Editor = struct {
         // Load file if provided
         var loaded_content: ?[]const u8 = null;
         if (filename) |path| {
-            const content = FileIO.open(allocator, path) catch |err| {
+            const content = FileIO.open(allocator, path) catch {
                 return EditorError.OpenFailed;
             };
             loaded_content = content;
@@ -192,7 +192,7 @@ pub const Editor = struct {
         };
 
         const content = self.buffer.toSlice();
-        FileIO.save(path, content) catch |err| {
+        FileIO.save(path, content) catch {
             return EditorError.SaveFailed;
         };
 
