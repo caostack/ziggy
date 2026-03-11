@@ -105,21 +105,28 @@ pub const GapBuffer = struct {
     pub fn getLine(self: *const Self, line_num: usize) ?[]const u8 {
         if (line_num >= self.line_count) return null;
 
-        const start = self.line_starts[line_num];
-        const end = if (line_num + 1 < self.line_count)
+        const gap_size = self.gap_end - self.gap_start;
+
+        // line_starts stores logical offsets
+        const logical_start = self.line_starts[line_num];
+        const logical_end = if (line_num + 1 < self.line_count)
             self.line_starts[line_num + 1]
         else
-            self.gap_start;
+            self.length();
 
-        // Adjust for gap
-        // start < gap_start: content is before gap, no adjustment needed
-        // start >= gap_start: content is after gap, skip over gap
-        const adjusted_start = if (start < self.gap_start) start else start + (self.gap_end - self.gap_start);
-        // end can equal gap_start for the last line, so use <=
-        const adjusted_end = if (end <= self.gap_start) end else end + (self.gap_end - self.gap_start);
+        // Convert logical to physical offsets
+        const phys_start = if (logical_start < self.gap_start)
+            logical_start
+        else
+            logical_start + gap_size;
 
-        if (adjusted_start >= adjusted_end) return "";
-        return self.data[adjusted_start..adjusted_end];
+        const phys_end = if (logical_end <= self.gap_start)
+            logical_end
+        else
+            logical_end + gap_size;
+
+        if (phys_start >= phys_end) return "";
+        return self.data[phys_start..phys_end];
     }
 
     /// Get total number of lines
@@ -132,12 +139,18 @@ pub const GapBuffer = struct {
         if (line_num >= self.line_count) {
             return 0;
         }
+        const start = self.line_starts[line_num];
+        const end = if (line_num + 1 < self.line_count)
+            self.line_starts[line_num + 1]
+        else
+            self.length();
+        
+        if (end <= start) return 0;
+        // Last line doesn't have trailing newline
         if (line_num == self.line_count - 1) {
-            // Last line
-            return self.gap_start - self.line_starts[line_num];
-        } else {
-            return self.line_starts[line_num + 1] - self.line_starts[line_num] - 1; // -1 for newline
+            return end - start;
         }
+        return end - start - 1; // -1 for newline
     }
 
     /// Insert text at cursor position
@@ -169,16 +182,20 @@ pub const GapBuffer = struct {
                 try self.growLineCapacity();
             }
 
-            // The new line starts right after the newline (at current gap_start)
-            const new_line_start = self.gap_start;
+            // line_starts stores logical offsets (position in content, ignoring gap)
+            // After moveGapToCursor() and inserting newline, the logical offset of new line
+            // = logical offset of cursor + 1 (the newline we just inserted)
+            // Since gap is at cursor, logical offset of cursor = gap_start - bytes.len + bytes.len = gap_start
+            // But we want the position AFTER the newline, which is gap_start
+            const new_line_logical = self.gap_start;
             const insert_at_row = self.cursor_row + 1;
 
-            // Shift line_starts to make room for new line
+            // Shift line_starts and add 1 to offsets after insertion point (for the newline char)
             var i = self.line_count;
             while (i > insert_at_row) : (i -= 1) {
-                self.line_starts[i] = self.line_starts[i - 1];
+                self.line_starts[i] = self.line_starts[i - 1] + 1;
             }
-            self.line_starts[insert_at_row] = new_line_start;
+            self.line_starts[insert_at_row] = new_line_logical;
             self.line_count += 1;
 
             self.cursor_row += 1;
