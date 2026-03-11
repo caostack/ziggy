@@ -31,6 +31,16 @@ zig build run
 zig build run -- your-file.txt
 ```
 
+## Quality Gate
+
+This project uses a quality gate system to ensure code quality. Run it before committing:
+
+```bash
+./quality-gate.sh
+```
+
+The quality gate runs automatically on git commits and in CI/CD.
+
 ## Note
 
 ⚠️ **This is a toy project** for learning and demonstrating Zig programming. Not intended for production use.

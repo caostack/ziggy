@@ -1,0 +1,47 @@
+name: Ziggy Quality Gate
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quality-gate:
+    name: Quality Gate Checks
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: ⚙️ Setup Zig
+      uses: goto-bus/setup-zig@v2
+      with:
+        version: 0.15.2
+
+    - name: 🔨 Build
+      run: zig build
+
+    - name: 🧪 Run Tests
+      run: zig build test
+
+    - name: 📊 Code Quality
+      run: |
+        echo "Checking code quality..."
+        # 检查编译警告
+        if zig build 2>&1 | grep -i "warning"; then
+          echo "⚠️  Compiler warnings detected"
+          exit 1
+        fi
+
+    - name: 🔒 Security Check
+      run: |
+        echo "Checking for secrets..."
+        if git grep -iq 'password\|secret\|api[_-]key' -- ':!*.md' ':!*.yml' ':!*.sh'; then
+          echo "⚠️  Potential secrets found in code"
+          exit 1
+        fi
+
+    - name: ✅ Quality Gate Passed
+      run: echo "🎉 All quality checks passed!"
