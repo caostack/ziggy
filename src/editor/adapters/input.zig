@@ -65,9 +65,15 @@ pub const NativeInput = struct {
             return self.parseEscapeSequence();
         }
 
-        // Handle control characters (Ctrl+ key)
-        if (first_byte < 32) {
-            return parseControlCharacter(first_byte);
+        // Handle enter first (both \r and \n for cross-platform)
+        // Must be checked before control characters since \r < 32
+        if (first_byte == '\r' or first_byte == '\n') {
+            return .enter;
+        }
+
+        // Handle tab
+        if (first_byte == '\t') {
+            return .tab;
         }
 
         // Handle backspace/delete
@@ -75,14 +81,9 @@ pub const NativeInput = struct {
             return .backspace;
         }
 
-        // Handle enter
-        if (first_byte == '\n') {
-            return .enter;
-        }
-
-        // Handle tab
-        if (first_byte == '\t') {
-            return .tab;
+        // Handle control characters (Ctrl+ key) - after special keys
+        if (first_byte < 32) {
+            return parseControlCharacter(first_byte);
         }
 
         // UTF-8 character: read remaining bytes
