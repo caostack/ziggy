@@ -9,3 +9,30 @@ zig-out/
 *.dll
 *.so
 *.dylib
+
+# Zig test executables
+test
+zig-cache/o/*/test
+
+# Build artifacts
+*.d
+*.d.*
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.*.sw*
+
+# Documentation (ignore all except README.md)
+*.md
+!README.md
+
+# GitHub specific
+.github/
+
+# Quality gate scripts
+quality-gate.sh
+setup-branch-protection.sh
