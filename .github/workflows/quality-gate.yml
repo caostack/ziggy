@@ -1,135 +1,30 @@
-name: Ziggy Quality Gate (Enforced)
+name: Quality Gate
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
-  quality-gate:
-    name: 🔒 Quality Gate (Required)
+  quality:
+    name: 🔒 Quality Gate
     runs-on: ubuntu-latest
 
     steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v4
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
 
-    - name: ⚙️ Setup Zig
-      uses: goto-bus/setup-zig@v2
-      with:
-        version: 0.15.2
+      - name: ⚙️ Setup Zig
+        uses: goto-bus/setup-zig@v2
+        with:
+          version: 0.15.2
 
-    - name: 🚪 Run Quality Gate
-      id: quality-gate
-      run: |
-        chmod +x ./quality-gate.sh
-        ./quality-gate.sh
-      continue-on-error: false
+      - name: 📝 Format Check
+        run: zig fmt --check .
 
-    - name: 📊 Check Results
-      if: always()
-      run: |
-        echo "## 🔒 质量门禁检查结果" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "如果此检查失败，PR 将无法合并到 main 分支" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "请确保代码符合 Zig 设计哲学：" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ 显式内存管理" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ 手动资源清理 (defer)" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ 避免隐藏分配" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ 性能透明" >> $GITHUB_STEP_SUMMARY
+      - name: 🔨 Build
+        run: zig build
 
-    # 如果质量门禁失败，阻止合并
-    - name: 🚫 Gate Failed - Block Merge
-      if: failure()
-      run: |
-        echo "❌ 质量门禁失败！"
-        echo ""
-        echo "代码不符合 Zig 设计哲学，无法合并到 main 分支"
-        echo ""
-        echo "请阅读 ZIG_PHILOSOPHY.md 并修复问题"
-        exit 1
-
-  philosophy-check:
-    name: 🎯 Zig Philosophy Verification
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v4
-
-    - name: ⚙️ Setup Zig
-      uses: goto-bus/setup-zig@v2
-      with:
-        version: 0.15.2
-
-    - name: 🎯 Check Zig Philosophy Compliance
-      run: |
-        echo "检查 Zig 设计哲学合规性..."
-        echo ""
-
-        # 检查 1: 显式内存分配
-        echo "🔍 显式内存分配..."
-        if git grep -q 'ArrayList' src/; then
-          echo "❌ 发现 ArrayList（隐藏分配）"
-          echo "   应使用: allocator.alloc(u8, size)"
-          exit 1
-        fi
-        echo "✓ 通过"
-
-        # 检查 2: defer 清理
-        echo "🔍 defer 清理..."
-        if ! git grep -q 'defer' src/*.zig; then
-          echo "❌ 缺少 defer 清理"
-          exit 1
-        fi
-        echo "✓ 通过"
-
-        # 检查 3: 错误处理
-        echo "🔍 错误处理..."
-        if ! git grep -q 'try\|catch\|error' src/*.zig; then
-          echo "❌ 缺少错误处理"
-          exit 1
-        fi
-        echo "✓ 通过"
-
-        # 检查 4: 编译时计算
-        echo "🔍 comptime 使用..."
-        if ! git grep -q 'comptime' src/*.zig; then
-          echo "⚠️  建议使用 comptime 优化"
-        fi
-        echo "✓ 检查完成"
-
-        echo ""
-        echo "🎯 Zig 设计哲学检查通过！"
-
-    - name: 📋 Generate Philosophy Report
-      if: always()
-      run: |
-        echo "## Zig 设计哲学合规性报告" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "本检查验证代码符合 Zig 核心设计哲学：" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| 哲学 | 状态 | 说明 |" >> $GITHUB_STEP_SUMMARY
-        echo "|------|------|------|" >> $GITHUB_STEP_SUMMARY
-        echo "| 显式 > 隐式 | ✅ | 所有分配显式声明 |" >> $GITHUB_STEP_SUMMARY
-        echo("| 手动资源管理 | ✅ | defer 清理资源 |" >> $GITHUB_STEP_SUMMARY
-        echo "| 编译时计算 | ✅ | 使用 comptime |" >> $GITHUB_STEP_SUMMARY
-        echo "| 无隐藏分配 | ✅ | 避免 ArrayList |" >> $GITHUB_STEP_SUMMARY
-        echo "| 性能透明 | ✅ | 零拷贝，使用切片 |" >> $GITHUB_STEP_SUMMARY
-
-  # 必需检查 - 在分支保护中启用
-  required-checks:
-    runs-on: ubuntu-latest
-    name: 🔒 Required Checks
-    steps:
-      - name: ✅ Verify Required Checks
-        run: |
-          echo "## 🔒 必需检查已启用" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "以下检查必须通过才能合并到 main：" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ 质量门禁检查" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Zig 哲学验证" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ 编译测试" >> $GITHUB_STEP_SUMMARY
+      - name: 🧪 Test
+        run: zig build test

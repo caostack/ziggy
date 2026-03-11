@@ -44,8 +44,15 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
-    // 质量门禁步骤
-    const quality_step = b.step("quality", "Run quality gate checks");
+    // 质量门禁步骤: fmt check -> build -> test
+    const quality_step = b.step("quality", "Run quality gate checks (fmt + build + test)");
     quality_step.dependOn(&run_mod_tests.step);
     quality_step.dependOn(&run_exe_tests.step);
+
+    // fmt 检查
+    const fmt_check = b.addFmt(.{
+        .paths = &.{ "src", "build.zig" },
+        .check = true,
+    });
+    quality_step.dependOn(&fmt_check.step);
 }
